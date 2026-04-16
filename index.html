@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>DELTA SHOP 1 - RANDOM</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root { --bg: #0d0d16; --cyan: #00f2ff; --gold: #ffcc00; --card: #161625; }
+        body { background: var(--bg); color: white; font-family: sans-serif; padding: 15px; margin: 0; }
+        .box { background: var(--card); padding: 15px; border-radius: 15px; border: 1px solid #333; margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #000; color: #fff; box-sizing: border-box; }
+        button { border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; margin-top: 5px; }
+        .btn-main { background: var(--cyan); color: #000; }
+        .btn-gold { background: var(--gold); color: #000; }
+        .st-Success { color: #00ff88; font-weight:bold; } .st-Fail { color: #ff4444; font-weight:bold; } .st-Pending { color: var(--gold); font-weight:bold; }
+        table { width:100%; font-size:11px; border-collapse: collapse; }
+        td { padding: 8px; border-bottom: 1px solid #222; }
+        .key-box { background: #000; padding: 10px; border: 1px dashed var(--cyan); color: var(--cyan); font-family: monospace; word-break: break-all; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div id="auth" class="box">
+        <h3 style="text-align:center">SHOP 1 - ĐĂNG NHẬP</h3>
+        <input type="text" id="au" placeholder="Tài khoản...">
+        <input type="password" id="ap" placeholder="Mật khẩu...">
+        <button class="btn-main" onclick="login()">VÀO SHOP</button>
+    </div>
+
+    <div id="shop" style="display:none">
+        <div class="box">
+            ID: <b id="u-id" style="color:var(--cyan)"></b> | Ví: <b id="u-bl" style="color:var(--gold)">0</b>đ
+            <input type="number" id="n-amt" placeholder="Số tiền nạp...">
+            <button class="btn-gold" onclick="nap()">NẠP TIỀN</button>
+            <div id="qr" style="display:none; text-align:center; margin-top:10px;">
+                <img id="q-img" style="width:180px; border-radius:10px; border: 2px solid #fff;">
+                <p id="q-memo" style="color:var(--gold); font-weight:bold;"></p>
+                <button class="btn-main" onclick="guiDon()">XÁC NHẬN ĐÃ BANK</button>
+            </div>
+        </div>
+
+        <div class="box">
+            <h4 style="margin:0 0 10px 0; color:var(--cyan)">🎲 RANDOM MAY MẮN</h4>
+            <button class="btn-main" onclick="buy('r_ngay', 20000, 15, 'ngay')">QUAY NGÀY (20K)</button>
+            <button class="btn-main" onclick="buy('r_tuan', 40000, 12, 'tuan')">QUAY TUẦN (40K)</button>
+            <button class="btn-main" onclick="buy('r_thang', 80000, 10, 'thang')">QUAY THÁNG (80K)</button>
+            <button class="btn-main" onclick="buy('r_nam', 300000, 50, 'nam')">QUAY NĂM (300K)</button>
+        </div>
+
+        <div class="box">
+            <span style="font-size:12px; color:#888">🔑 KEY ĐÃ TRÚNG</span>
+            <div id="h-keys"></div>
+        </div>
+
+        <div class="box">
+            <span style="font-size:12px; color:#888">🕒 LỊCH SỬ NẠP</span>
+            <table><tbody id="h-pay"></tbody></table>
+        </div>
+    </div>
+
+<script>
+    const config = { apiKey: "AIzaSyBk6R1TDZeAxh37JQLgL_6Wl0v8m8Sg0", databaseURL: "https://shopctv-61f96-default-rtdb.asia-southeast1.firebasedatabase.app/" };
+    firebase.initializeApp(config); const db = firebase.database();
+    let cur = null;
+
+    function login(){
+        const u = document.getElementById('au').value.trim().toLowerCase(), p = document.getElementById('ap').value;
+        db.ref('users_shop1/'+u).once('value', s => {
+            if(s.val() && s.val().password == p){
+                cur = u; document.getElementById('auth').style.display='none'; document.getElementById('shop').style.display='block';
+                document.getElementById('u-id').innerText = u;
+                db.ref('users_shop1/'+u+'/balance').on('value', b => document.getElementById('u-bl').innerText = (b.val()||0).toLocaleString());
+                
+                // Fix lịch sử nạp
+                db.ref('history_pay/'+u).on('value', h => {
+                    const t = document.getElementById('h-pay'); t.innerHTML = "";
+                    let arr = []; h.forEach(c => arr.push(c.val()));
+                    arr.reverse().forEach(d => {
+                        let txt = d.status==='Success'?'Thành công':(d.status==='Fail'?'Bị hủy':'Đang duyệt');
+                        t.innerHTML += `<tr><td>${d.time}</td><td>${Number(d.amount).toLocaleString()}đ</td><td class="st-${d.status}">${txt}</td></tr>`;
+                    });
+                });
+
+                // Lịch sử mua key
+                db.ref('history_keys/'+u).on('value', h => {
+                    const d = document.getElementById('h-keys'); d.innerHTML = "";
+                    h.forEach(c => {
+                        const k = c.val();
+                        if(k.key !== 'Không trúng') d.innerHTML += `<div class="key-box">${k.type}: ${k.key}</div>`;
+                    });
+                });
+            } else alert("Sai!");
+        });
+    }
+
+    function nap(){
+        const a = document.getElementById('n-amt').value; if(a < 1000) return;
+        document.getElementById('q-img').src = `https://qr.sepay.vn/img?acc=0588807300000&bank=MB&amount=${a}&des=NAP%20${cur}&name=NGUYEN%20VAN%20A`;
+        document.getElementById('q-memo').innerText = "Nội dung: NAP " + cur;
+        document.getElementById('qr').style.display='block';
+    }
+
+    function guiDon(){
+        const rid = db.ref('bank_requests').push().key, t = new Date().toLocaleTimeString();
+        db.ref('bank_requests/'+rid).set({user:cur, amount:document.getElementById('n-amt').value, shop:'users_shop1', status:'Pending', id:rid, time:t});
+        db.ref('history_pay/'+cur+'/'+rid).set({time:t, amount:document.getElementById('n-amt').value, status:'Pending', id:rid});
+        alert("Đã gửi đơn!"); document.getElementById('qr').style.display='none';
+    }
+
+    function buy(type, price, limit, target) {
+        db.ref('users_shop1/'+cur).once('value', s => {
+            const b = s.val().balance; if(b < price) return alert("Hết tiền!");
+            db.ref('sys/v1/'+type).transaction(c => (c || 0) + 1, (err, com, snap) => {
+                db.ref('users_shop1/'+cur+'/balance').set(b - price);
+                const time = new Date().toLocaleString();
+                if(snap.val() % limit === 0) {
+                    db.ref('keys/shop1/'+target).limitToFirst(1).once('value', k => {
+                        if(!k.val()) return alert("Trúng nhưng hết key!");
+                        const kid = Object.keys(k.val())[0], kv = k.val()[kid];
+                        db.ref('keys/shop1/'+target+'/'+kid).remove();
+                        db.ref('history_keys/'+cur).push({time:time, type:'Random '+target, key:kv});
+                        alert("TRÚNG RỒI: " + kv);
+                    });
+                } else {
+                    db.ref('history_keys/'+cur).push({time:time, type:'Random '+target, key:'Không trúng'});
+                    alert("Hụt rồi!");
+                }
+            });
+        });
+    }
+</script>
+</body>
+</html>
